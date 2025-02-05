@@ -1,31 +1,42 @@
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
-const { Pool } = require("pg");
+import express from 'express';
+import { Pool } from 'pg';
+import cors from 'cors';
+import dotenv from 'dotenv';
 
 dotenv.config();
-
 const app = express();
-app.use(cors());
-app.use(express.json());
+const port = process.env.PORT || 3001;
 
-// Connect to PostgreSQL
+// PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
-// API Route to Handle RSVP Submissions
-app.post("/api/rsvp", async (req, res) => {
-  const { name, guests } = req.body;
+app.use(cors());
+app.use(express.json());
+
+// RSVP Endpoint
+app.post('/api/rsvp', async (req, res) => {
+  const { name, starter, main, dessert, dietary_requirements } = req.body;
+
+  if (!name || !starter || !main || !dessert) {
+    return res.status(400).json({ error: 'All fields except dietary requirements are required' });
+  }
+
   try {
-    await pool.query("INSERT INTO rsvps (name, guests) VALUES ($1, $2)", [name, guests]);
-    res.status(201).json({ message: "RSVP recorded!" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const query = `
+      INSERT INTO rsvps (name, starter, main, dessert, dietary_requirements)
+      VALUES ($1, $2, $3, $4, $5) RETURNING *;
+    `;
+    const values = [name, starter, main, dessert, dietary_requirements || 'None'];
+    const result = await pool.query(query, values);
+
+    res.status(201).json({ message: 'RSVP submitted', data: result.rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-// Start Server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+export default app;
